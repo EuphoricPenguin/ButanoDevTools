@@ -1747,7 +1747,7 @@ class LMMSConverterGUI:
     
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("LMMS to IT Converter")
+        self.root.title("LMMSisIT - LMMS to IT Converter")
         self.root.geometry("600x400")
         self.root.minsize(500, 300)
         
@@ -1803,18 +1803,6 @@ class LMMSConverterGUI:
         
         # Check LMMS availability
         self._check_lmms_available()
-        
-        # Status/Info section
-        self.info_text = tk.Text(options_frame, height=5, wrap=tk.WORD)
-        self.info_text.pack(fill=tk.X)
-        self.info_text.insert(tk.END, "This converter requires LMMS to be installed.\n\n"
-                                       "Each instrument is rendered as a single note (C4) sample using LMMS CLI.\n"
-                                       "The samples are then used as instruments in the IT file.\n\n"
-                                       "Supported:\n"
-                                       "• Built-in synthesizers (TripleOscillator, Monstro, Nescaline, etc.)\n"
-                                       "• Sample-based instruments (AudioFileProcessor, SF2Player)\n"
-                                       "• VST instruments (if the VST plugins are installed)")
-        self.info_text.config(state=tk.DISABLED)
         
         # Progress section
         progress_frame = ttk.Frame(main_frame)
