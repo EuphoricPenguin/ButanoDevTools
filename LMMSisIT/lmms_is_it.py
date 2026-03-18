@@ -334,13 +334,14 @@ def modify_project_for_sample_render(original_root: ET.Element,
     Modify a copy of the original LMMS project to render a single instrument sample.
     
     Preserves ALL project data (FX chains, mixer routing, effects, etc.) but:
-    - Mutes all tracks except the target track
+    - Mutes all tracks except the target instrument track
+    - Mutes all non-instrument tracks (sample tracks, pattern tracks, automation tracks)
     - Replaces the target track's MIDI clips with a single C4 note
     - Sets timeline to render just the note duration
     
     Args:
         original_root: Parsed XML root of original project
-        track_index: Index of the track to render (0-based)
+        track_index: Index of the instrument track to render (0-based, only counting type=0 tracks)
         base_note: MIDI note to render (e.g., 60 = C4)
         duration_seconds: Duration of the note to render
         project_globals: Project timing info
@@ -370,44 +371,59 @@ def modify_project_for_sample_render(original_root: ET.Element,
     if trackcontainer is None:
         raise ValueError("Could not find trackcontainer in project")
     
-    # Process all instrument tracks
-    current_track_idx = 0
+    # Track types from LMMS:
+    # 0 = Instrument track (synths, samplers, VSTs)
+    # 1 = Pattern/Beat-Bassline track
+    # 2 = Sample track (audio files on timeline - NOT instrument samples)
+    # 5 = Automation track
+    # 6 = Hidden automation track (legacy)
+    
+    # Process all tracks
+    current_instrument_idx = 0
     for track_elem in trackcontainer.findall('track'):
         track_type = int(track_elem.get('type', '-1'))
-        if track_type != 0:  # Only instrument tracks
-            continue
         
-        if current_track_idx == track_index:
-            # This is the target track - modify its clips
-            track_elem.set('muted', '0')  # Unmute
-            track_elem.set('solo', '0')   # No solo
+        if track_type == 0:
+            # Instrument track (type 0)
+            if current_instrument_idx == track_index:
+                # This is the target track - modify its clips
+                track_elem.set('muted', '0')  # Unmute
+                track_elem.set('solo', '0')   # No solo
+                
+                # Remove all existing MIDI clips
+                for clip in list(track_elem.findall('midiclip')):
+                    track_elem.remove(clip)
+                for clip in list(track_elem.findall('patternclip')):
+                    track_elem.remove(clip)
+                
+                # Add a single MIDI clip with one note
+                new_clip = ET.SubElement(track_elem, 'midiclip')
+                new_clip.set('pos', '0')
+                new_clip.set('len', str(note_len_ticks))
+                new_clip.set('muted', '0')
+                new_clip.set('type', '1')
+                
+                # Add the single note
+                new_note = ET.SubElement(new_clip, 'note')
+                new_note.set('pos', '0')
+                new_note.set('len', str(note_len_ticks))
+                new_note.set('key', str(base_note))
+                new_note.set('vol', '100')
+                new_note.set('pan', '0')
+                
+            else:
+                # Other instrument tracks - mute them
+                track_elem.set('muted', '1')
             
-            # Remove all existing MIDI clips
-            for clip in list(track_elem.findall('midiclip')):
-                track_elem.remove(clip)
-            for clip in list(track_elem.findall('patternclip')):
-                track_elem.remove(clip)
+            current_instrument_idx += 1
             
-            # Add a single MIDI clip with one note
-            new_clip = ET.SubElement(track_elem, 'midiclip')
-            new_clip.set('pos', '0')
-            new_clip.set('len', str(note_len_ticks))
-            new_clip.set('muted', '0')
-            new_clip.set('type', '1')
-            
-            # Add the single note
-            new_note = ET.SubElement(new_clip, 'note')
-            new_note.set('pos', '0')
-            new_note.set('len', str(note_len_ticks))
-            new_note.set('key', str(base_note))
-            new_note.set('vol', '100')
-            new_note.set('pan', '0')
-            
-        else:
-            # Other tracks - mute them
+        elif track_type == 2 or track_type == 1:
+            # Sample tracks (type 2) and Pattern tracks (type 1)
+            # Mute these - they play audio directly on timeline without MIDI
             track_elem.set('muted', '1')
         
-        current_track_idx += 1
+        # Automation tracks (type 5, 6) are left as-is to preserve automation
+        # These don't produce audio, just parameter automation
     
     # Update timeline to render just the note
     timeline = root.find('.//timeline')
@@ -583,6 +599,12 @@ def render_via_lmms_cli(track: LMMSInstrumentTrack, project_globals: dict,
         
         # Trim trailing silence
         audio_data = trim_trailing_silence(audio_data, threshold=1e-5)
+        
+        # Normalize audio to 0dBFS (peak amplitude of 1.0)
+        # This prevents double attenuation since LMMS already baked volume into the render
+        peak = np.max(np.abs(audio_data))
+        if peak > 0:
+            audio_data = audio_data / peak
         
         return audio_data
         
@@ -1597,7 +1619,7 @@ def convert_mmp_to_it(mmp_path: str, it_path: str, progress_callback=None) -> bo
         num_samples=num_samples,
         num_patterns=num_patterns,
         global_volume=gain_map.global_volume,
-        mixing_volume=128,
+        mixing_volume=48,  # Standard IT mixing volume (prevents OpenMPT limiter issues)
         initial_speed=timing['it_speed'],
         initial_tempo=timing['it_tempo'],
         channel_pans=channel_pans,

@@ -327,30 +327,77 @@ The `<object id="..."/>` element references the AutomatableModel being controlle
 
 ## Sample Tracks
 
-Sample tracks contain audio file clips:
+Sample tracks are a track type (type 2) designed for arranging audio samples directly on the timeline. Unlike instrument tracks, sample tracks play audio files directly without MIDI note sequencing.
+
+### Sample Track Structure
 
 ```xml
-<track type="2" name="Sample Track" muted="0" solo="0">
-  <sampletrack vol="100" pan="0" mixch="0"/>
-  <sampleclip pos="0" len="22050" name="drumloop.ogg" muted="0" 
+<track type="2" name="Sample Track" muted="0" solo="0" trackheight="32">
+  <sampletrack vol="100" pan="0" mixch="0">
+    <fxchain enabled="0" numofeffects="0">
+      <!-- Effects chain -->
+    </fxchain>
+  </sampletrack>
+  <sampleclip pos="0" len="22050" muted="0" 
               src="factorysample:drums/loops/beat01.ogg"
-              fitPatterns="0"/>
+              off="0" autoresize="1" sample_rate="44100"/>
+  <sampleclip pos="384" len="192" muted="0" src="usersample:my_sample.wav"/>
 </track>
+```
+
+### Sample Track Element (`<sampletrack>`)
+
+The `<sampletrack>` element is a child of the `<track>` element and contains track-specific settings:
+
+| Attribute | Type | Default | Range | Description |
+|-----------|------|---------|-------|-------------|
+| `vol` | float | 100 | 0-200 | Track volume percentage |
+| `pan` | float | 0 | -100 to 100 | Panning (left to right) |
+| `mixch` | int | 0 | 0+ | Mixer channel assignment (0 = Master) |
+
+#### Effect Chain
+
+Sample tracks can have an effect chain:
+
+```xml
+<sampletrack vol="100" pan="0" mixch="0">
+  <fxchain enabled="1" numofeffects="1">
+    <effect name="ladspaeffect" gate="0" wet="1" autoquit="1">
+      <!-- Effect configuration -->
+    </effect>
+  </fxchain>
+</sampletrack>
+```
+
+### Sample Clip Element (`<sampleclip>`)
+
+Sample clips are children of the track element and represent individual audio samples placed on the timeline:
+
+```xml
+<sampleclip pos="0" len="22050" muted="0" 
+            src="factorysample:drums/kick.wav"
+            off="0" autoresize="1" sample_rate="44100"
+            color="#ff5500" reversed="true"/>
 ```
 
 ### Sample Clip Attributes
 
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| `pos` | int | Start position in ticks |
-| `len` | int | Length in ticks |
-| `name` | string | Clip name |
-| `src` | string | Path to audio file |
-| `fitPatterns` | bool | Whether to fit to pattern length |
+| Attribute | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `pos` | int | 0 | Start position in ticks |
+| `len` | int | - | Length in ticks |
+| `muted` | bool | 0 | Whether clip is muted |
+| `src` | string | - | Path to audio file (with optional prefix) |
+| `off` | int | 0 | Start time offset in ticks |
+| `autoresize` | bool | 1 | Whether clip auto-resizes to sample length |
+| `data` | string | - | Base64-encoded sample data (if no file) |
+| `sample_rate` | int | - | Sample rate of embedded sample (with `data`) |
+| `color` | string | - | Optional clip color as hex (e.g., "#ff5500") |
+| `reversed` | bool | false | Whether the sample is played in reverse |
 
 ### Path Prefixes
 
-File paths can use special prefixes:
+File paths in `src` can use special prefixes for portability:
 
 | Prefix | Description |
 |--------|-------------|
@@ -359,6 +406,146 @@ File paths can use special prefixes:
 | `factorypreset:` | Factory presets directory |
 | `userpreset:` | User presets directory |
 | `local:` | Project bundle local resources |
+
+### Embedded Sample Data
+
+If no `src` file is available, samples can be embedded directly using Base64-encoded data:
+
+```xml
+<sampleclip pos="0" len="192" muted="0" 
+            data="UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA="
+            sample_rate="44100"/>
+```
+
+The `data` attribute contains Base64-encoded audio sample data. The `sample_rate` attribute specifies the original sample rate for proper playback.
+
+### Reversed Playback
+
+When `reversed="true"` is set, the sample plays backwards:
+
+```xml
+<sampleclip pos="0" len="22050" src="usersample:cymbal.wav" reversed="true"/>
+```
+
+### Time Offset
+
+The `off` attribute provides a start time offset in ticks, allowing the clip to start playing from a point within the sample:
+
+```xml
+<sampleclip pos="0" len="192" src="usersample:loop.wav" off="48"/>
+```
+
+This starts playback 48 ticks into the sample.
+
+### Auto-Resize Behavior
+
+When `autoresize="1"` (default):
+- The clip length automatically adjusts to match the sample duration
+- Changes when BPM changes (since ticks represent time differently at different tempos)
+- Manual resizing disables auto-resize
+
+When `autoresize="0"`:
+- The clip maintains its manually set length
+- The sample may be truncated or may end before the clip ends
+
+### Sample Length Calculation
+
+The clip length in ticks is calculated from the sample's frame count:
+
+```cpp
+TimePos SampleClip::sampleLength() const
+{
+    return static_cast<int>(m_sample.sampleSize() / Engine::framesPerTick(m_sample.sampleRate()));
+}
+```
+
+Where `framesPerTick` depends on the current tempo:
+```cpp
+framesPerTick = sampleRate * 60.0f * 4 / DefaultTicksPerBar / tempo;
+```
+
+### Complete Sample Track Example
+
+```xml
+<track type="2" name="Vocals" muted="0" solo="0" trackheight="64">
+  <sampletrack vol="85" pan="0" mixch="1">
+    <fxchain enabled="1" numofeffects="2">
+      <effect name="ladspaeffect" gate="0" wet="0.8" autoquit="1">
+        <ladspacontrols>
+          <port01 data="0.5"/>
+          <port02 data="0.3"/>
+        </ladspacontrols>
+        <key>
+          <attribute name="plugin" value="Calf Reverb"/>
+          <attribute name="file" value="calf"/>
+        </key>
+      </effect>
+      <effect name="ladspaeffect" gate="0" wet="0.5" autoquit="1">
+        <ladspacontrols>
+          <port01 data="0.7"/>
+        </ladspacontrols>
+        <key>
+          <attribute name="plugin" value="Calf Compressor"/>
+          <attribute name="file" value="calf"/>
+        </key>
+      </effect>
+    </fxchain>
+  </sampletrack>
+  <sampleclip pos="0" len="1536" muted="0" 
+              src="usersample:vocals/verse1.wav" 
+              autoresize="1"/>
+  <sampleclip pos="1536" len="1536" muted="0" 
+              src="usersample:vocals/chorus.wav" 
+              autoresize="1"/>
+  <sampleclip pos="3072" len="768" muted="1" 
+              src="usersample:vocals/bridge.wav" 
+              autoresize="1" color="#ff0000"/>
+  <sampleclip pos="3840" len="1536" muted="0" 
+              src="usersample:vocals/outro.wav" 
+              reversed="true" autoresize="1"/>
+</track>
+```
+
+### Playback Behavior
+
+Sample tracks handle playback differently from instrument tracks:
+
+1. **Direct Audio Playback**: Samples play directly without MIDI triggering
+2. **Position-Based**: Playback is based on the timeline position, not note events
+3. **Sample Rate Handling**: Sample rate conversion is applied automatically if the sample's rate differs from the project rate
+4. **Real-Time Stretching**: When BPM changes, sample clips adjust their tick length while maintaining audio duration
+
+### Recording
+
+Sample tracks support recording audio input:
+
+```xml
+<sampleclip pos="0" len="192" muted="0" record="1"/>
+```
+
+The `record` attribute (BoolModel) enables recording mode on the clip.
+
+### Mixer Routing
+
+Sample tracks route to the mixer via the `mixch` attribute:
+
+- `mixch="0"` routes directly to the Master channel
+- `mixch="1"` routes to FX channel 1
+- Higher values route to the corresponding FX channel
+
+The routing occurs after the track's volume, panning, and effect chain processing.
+
+### Sample Track vs AudioFileProcessor
+
+Sample tracks and the AudioFileProcessor instrument serve different purposes:
+
+| Feature | Sample Track | AudioFileProcessor |
+|---------|--------------|-------------------|
+| Triggering | Timeline position | MIDI notes |
+| Pitch | Original pitch | Follows MIDI key |
+| Time stretching | No (unless BPM changes) | Yes (follows note length) |
+| Multiple instances | Multiple clips per track | One sample per instance |
+| Use case | Arranging recordings | Sampling/beat making |
 
 ---
 
@@ -2114,5 +2301,9 @@ The solo system tracks `mutedBeforeSolo` to restore previous states:
 - Song model: `lmms/src/core/Song.cpp`
 - MIDI clips: `lmms/src/tracks/MidiClip.cpp`
 - Automation: `lmms/src/tracks/AutomationClip.cpp`
+- Sample Track: `lmms/src/tracks/SampleTrack.cpp`
+- Sample Clip: `lmms/src/core/SampleClip.cpp`
+- Sample: `lmms/include/Sample.h`
+- Sample Buffer: `lmms/src/core/SampleBuffer.cpp`
 - VeSTige: `lmms/plugins/vestige/Vestige.cpp`
 - VST Plugin base: `lmms/plugins/VstBase/VstPlugin.cpp`
