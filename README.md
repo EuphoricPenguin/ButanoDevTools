@@ -1,7 +1,7 @@
 # ButanoDevTools
 
 A collection of Python-based development tools for Butano GBA development. 
-Created using GLM-5 via Cline with a general implementation plan from Opus 4.6 and advice from Gemini Pro 3.1.
+Created using GLM-5 via Cline with a general implementation plan from Opus 4.6 and extra pointers from Gemini Pro 3.1.
 
 ## Tools
 
