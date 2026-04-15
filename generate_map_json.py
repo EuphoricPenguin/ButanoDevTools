@@ -7,6 +7,8 @@ for use with butano-tiled.
 
 import os
 import json
+import sys
+import argparse
 import xml.etree.ElementTree as ET
 import tkinter as tk
 from tkinter import filedialog, scrolledtext
@@ -56,10 +58,20 @@ def generate_json_descriptor(tmx_file, json_file):
         return False, f"Error generating {os.path.basename(json_file)}: {str(e)}"
 
 
-def process_maps_folder(maps_folder, log_widget):
+def process_maps_folder(maps_folder, log_widget=None):
+    """
+    Process maps folder and generate JSON descriptors.
+    If log_widget is None, output goes to stdout (CLI mode).
+    """
+    def log_message(message):
+        if log_widget is not None:
+            log_widget.insert(tk.END, message + "\n")
+        else:
+            print(message)
+
     if not os.path.exists(maps_folder):
-        log_widget.insert(tk.END, f"Error: '{maps_folder}' folder not found!\n")
-        return
+        log_message(f"Error: '{maps_folder}' folder not found!")
+        return False
 
     tmx_files = [
         os.path.join(maps_folder, f)
@@ -68,13 +80,13 @@ def process_maps_folder(maps_folder, log_widget):
     ]
 
     if not tmx_files:
-        log_widget.insert(tk.END, f"No .tmx files found in '{maps_folder}'!\n")
-        return
+        log_message(f"No .tmx files found in '{maps_folder}'!")
+        return False
 
-    log_widget.insert(tk.END, f"Found {len(tmx_files)} .tmx file(s):\n")
+    log_message(f"Found {len(tmx_files)} .tmx file(s):")
     for tmx_file in tmx_files:
-        log_widget.insert(tk.END, f"  - {os.path.basename(tmx_file)}\n")
-    log_widget.insert(tk.END, "\n")
+        log_message(f"  - {os.path.basename(tmx_file)}")
+    log_message("")
 
     generated_count = 0
     skipped_count = 0
@@ -83,17 +95,20 @@ def process_maps_folder(maps_folder, log_widget):
         json_file = os.path.splitext(tmx_file)[0] + '.json'
 
         if os.path.exists(json_file):
-            log_widget.insert(tk.END, f"Skipping: {os.path.basename(json_file)} (already exists)\n")
+            log_message(f"Skipping: {os.path.basename(json_file)} (already exists)")
             skipped_count += 1
         else:
             success, message = generate_json_descriptor(tmx_file, json_file)
-            log_widget.insert(tk.END, message + "\n")
+            log_message(message)
             if success:
                 generated_count += 1
 
-    log_widget.insert(tk.END, f"\nSummary: Generated {generated_count}, Skipped {skipped_count}\n")
-    log_widget.insert(tk.END, "Done! Review the JSON files before running make.\n")
-    log_widget.see(tk.END)
+    log_message(f"\nSummary: Generated {generated_count}, Skipped {skipped_count}")
+    log_message("Done! Review the JSON files before running make.")
+    if log_widget is not None:
+        log_widget.see(tk.END)
+    
+    return True
 
 
 def browse_folder(entry_widget):
@@ -103,7 +118,8 @@ def browse_folder(entry_widget):
         entry_widget.insert(0, folder)
 
 
-def main():
+def main_gui():
+    """Launch the GUI interface."""
     root = tk.Tk()
     root.title("Butano-Tiled JSON Generator")
     root.geometry("600x500")
@@ -148,6 +164,30 @@ def main():
     root.geometry(f'+{x}+{y}')
 
     root.mainloop()
+
+
+def main():
+    """Main entry point - handles both CLI and GUI modes."""
+    parser = argparse.ArgumentParser(
+        description="Generate JSON descriptor files for Tiled map files (.tmx)",
+        epilog="If --maps-dir is not provided, the GUI will launch."
+    )
+    parser.add_argument(
+        '--maps-dir',
+        '-d',
+        type=str,
+        help='Path to the maps directory (can be absolute or relative). If provided, runs in CLI mode.'
+    )
+    
+    args = parser.parse_args()
+    
+    if args.maps_dir:
+        # CLI mode
+        maps_dir = os.path.abspath(args.maps_dir)
+        process_maps_folder(maps_dir)
+    else:
+        # GUI mode
+        main_gui()
 
 
 if __name__ == "__main__":

@@ -12,7 +12,7 @@ Graphics conversion tool that allows your to export spritesheets from [Piskel](h
 [LMMS](https://lmms.io/) to IT (Impulse Tracker) format converter for Direct Sound music. It works by sampling each instrument channel directly in LMMS with the provided project file. More testing is needed, but it should generally support most projects that consist of instrument tracks. You can evaluate output using [OpenMPT](https://openmpt.org/).
 
 ### GenerateMapJSON
-A tkinter-based GUI tool that automatically generates JSON descriptor files for [butano-tiled](https://github.com/AdrienPlazas/butano-tiled). This script parses all `.tmx` files in a selected folder and creates corresponding `.json` files with all layers exported as graphics.
+A tkinter-based GUI/CLI tool that automatically generates JSON descriptor files for [butano-tiled](https://github.com/AdrienPlazas/butano-tiled). This script parses all `.tmx` files in a selected folder and creates corresponding `.json` files with all layers exported as graphics.
 
 ## License
 
