@@ -24,6 +24,7 @@ def generate_json_descriptor(tmx_file, json_file):
         all_graphics = []
         all_objects = []
         all_tiles = []
+        npc_positions = {}
 
         for group in groups:
             group_name = group.get('name')
@@ -43,25 +44,49 @@ def generate_json_descriptor(tmx_file, json_file):
                 all_objects.append([
                     f"{group_name}/{og.get('name')}" for og in object_groups
                 ])
+            
+            # Extract NPC positions from the NPCs object group
+            for object_group in object_groups:
+                og_name = object_group.get('name')
+                if og_name and 'npc' in og_name.lower():
+                    for obj in object_group.findall('object'):
+                        npc_name = obj.get('name')
+                        npc_x = obj.get('x')
+                        npc_y = obj.get('y')
+                        if npc_name and npc_x and npc_y:
+                            # Convert pixel coordinates to tile coordinates (16x16 tiles)
+                            tile_x = int(npc_x) // 16
+                            tile_y = int(npc_y) // 16
+                            npc_positions[npc_name] = {
+                                "tile_x": tile_x,
+                                "tile_y": tile_y,
+                                "pixel_x": int(npc_x),
+                                "pixel_y": int(npc_y)
+                            }
 
         descriptor = {
             "graphics": all_graphics,
             "objects": all_objects,
             "tiles": all_tiles
         }
+        
+        # Add NPC positions if any were found
+        if npc_positions:
+            descriptor["npcs"] = npc_positions
 
         with open(json_file, 'w') as f:
             json.dump(descriptor, f, indent=4)
 
-        return True, f"Generated: {os.path.basename(json_file)}\n  Graphics: {all_graphics}\n  Objects: {all_objects}\n  Tiles: {all_tiles}"
+        return True, f"Generated: {os.path.basename(json_file)}\n  Graphics: {all_graphics}\n  Objects: {all_objects}\n  Tiles: {all_tiles}\n  NPCs: {list(npc_positions.keys())}"
     except Exception as e:
         return False, f"Error generating {os.path.basename(json_file)}: {str(e)}"
 
 
-def process_maps_folder(maps_folder, log_widget=None):
+def process_maps_folder(maps_folder, log_widget=None, force_overwrite=False):
     """
     Process maps folder and generate JSON descriptors.
     If log_widget is None, output goes to stdout (CLI mode).
+    If force_overwrite is True, regenerate all JSON files even if they exist.
     """
     def log_message(message):
         if log_widget is not None:
@@ -94,7 +119,7 @@ def process_maps_folder(maps_folder, log_widget=None):
     for tmx_file in tmx_files:
         json_file = os.path.splitext(tmx_file)[0] + '.json'
 
-        if os.path.exists(json_file):
+        if os.path.exists(json_file) and not force_overwrite:
             log_message(f"Skipping: {os.path.basename(json_file)} (already exists)")
             skipped_count += 1
         else:
@@ -178,13 +203,19 @@ def main():
         type=str,
         help='Path to the maps directory (can be absolute or relative). If provided, runs in CLI mode.'
     )
+    parser.add_argument(
+        '--force',
+        '-f',
+        action='store_true',
+        help='Overwrite existing JSON files instead of skipping them.'
+    )
     
     args = parser.parse_args()
     
     if args.maps_dir:
         # CLI mode
         maps_dir = os.path.abspath(args.maps_dir)
-        process_maps_folder(maps_dir)
+        process_maps_folder(maps_dir, force_overwrite=args.force)
     else:
         # GUI mode
         main_gui()
